@@ -19,44 +19,54 @@ from .consts import (
 from .prepare_sft import format_mcq, load_jsonl
 
 
-def get_eval_model_and_tokenizer():
+def get_eval_model_and_tokenizer(use_4bit: bool = True, load_adapters: bool = True):
     print(f"Loading tokenizer for {BASE_MODEL}...")
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 
-    print("Loading base model in 4-bit...")
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-    )
+    if use_4bit:
+        print("Loading base model in 4-bit...")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+        )
+    else:
+        print("Loading base model in bfloat16 full precision...")
+        model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+        )
 
-    model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        quantization_config=bnb_config,
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
-    )
     model.eval()
 
-    # Sequentially merge adapters into the base model.
-    # PEFT's set_adapter() only activates ONE adapter at a time, so we must
-    # merge each adapter into the weights before loading the next one.
-    # Order: CPT -> SFT -> KD (each builds on the previous)
-    if os.path.exists(CPT_OUTPUT_DIR):
-        print(f"Loading and merging Phase 0 CPT adapter from {CPT_OUTPUT_DIR}...")
-        model = PeftModel.from_pretrained(model, CPT_OUTPUT_DIR, is_trainable=False)
-        model = model.merge_and_unload()
+    if load_adapters:
+        # Sequentially merge adapters into the base model.
+        # PEFT's set_adapter() only activates ONE adapter at a time, so we must
+        # merge each adapter into the weights before loading the next one.
+        # Order: CPT -> SFT -> KD (each builds on the previous)
+        if os.path.exists(CPT_OUTPUT_DIR):
+            print(f"Loading and merging Phase 0 CPT adapter from {CPT_OUTPUT_DIR}...")
+            model = PeftModel.from_pretrained(model, CPT_OUTPUT_DIR, is_trainable=False)
+            model = model.merge_and_unload()
 
-    if os.path.exists(SFT_OUTPUT_DIR):
-        print(f"Loading and merging Phase 2 SFT adapter from {SFT_OUTPUT_DIR}...")
-        model = PeftModel.from_pretrained(model, SFT_OUTPUT_DIR, is_trainable=False)
-        model = model.merge_and_unload()
+        if os.path.exists(SFT_OUTPUT_DIR):
+            print(f"Loading and merging Phase 2 SFT adapter from {SFT_OUTPUT_DIR}...")
+            model = PeftModel.from_pretrained(model, SFT_OUTPUT_DIR, is_trainable=False)
+            model = model.merge_and_unload()
 
-    if os.path.exists(KD_OUTPUT_DIR):
-        print(f"Loading and merging Phase 4 KD adapter from {KD_OUTPUT_DIR}...")
-        model = PeftModel.from_pretrained(model, KD_OUTPUT_DIR, is_trainable=False)
-        model = model.merge_and_unload()
+        if os.path.exists(KD_OUTPUT_DIR):
+            print(f"Loading and merging Phase 4 KD adapter from {KD_OUTPUT_DIR}...")
+            model = PeftModel.from_pretrained(model, KD_OUTPUT_DIR, is_trainable=False)
+            model = model.merge_and_unload()
 
     return model, tokenizer
 
@@ -121,7 +131,7 @@ def evaluate_predictions(predictions, ground_truths, subjects):
     return {"overall": correct / total, "subjects": sub_acc}
 
 
-def main():
+def main(load_adapters: bool = True, use_4bit: bool = True, output_prefix: str = "vmlu_eval"):
     if not os.path.exists(FEW_SHOT_BANK_PATH):
         raise FileNotFoundError(
             f"Few shot bank missing at {FEW_SHOT_BANK_PATH}. Run prepare_sft.py first."
@@ -145,7 +155,9 @@ def main():
             "Neither test.jsonl nor valid.jsonl found in VMLU directory."
         )
 
-    model, tokenizer = get_eval_model_and_tokenizer()
+    model, tokenizer = get_eval_model_and_tokenizer(
+        use_4bit=use_4bit, load_adapters=load_adapters
+    )
 
     # 5 choices map to these exact letter tokens.
     # Qwen tokenization variations (leading spaces, newlines, etc).
@@ -184,6 +196,7 @@ def main():
     predictions = []
     ground_truths = []
     subjects = []
+    ids = []
 
     print("Beginning Evaluation...")
     with torch.no_grad():
@@ -220,18 +233,44 @@ def main():
             predictions.append(best_choice)
             ground_truths.append(row["answer"])
             subjects.append(row.get("subject", "Unknown"))
+            
+            # VMLU standardizes on custom IDs, fallback to index if missing
+            row_id = row.get("id", f"unknown-{i}")
+            ids.append(row_id)
 
     # Compute Metrics
     results_data = evaluate_predictions(predictions, ground_truths, subjects)
 
     os.makedirs(EVAL_RESULTS_DIR, exist_ok=True)
-    with open(
-        os.path.join(EVAL_RESULTS_DIR, "vmlu_eval_results.json"), "w", encoding="utf-8"
-    ) as f:
+    
+    # Save metrics JSON
+    json_path = os.path.join(EVAL_RESULTS_DIR, f"{output_prefix}_metrics.json")
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results_data, f, indent=4, ensure_ascii=False)
+        
+    # Save CSV Submission format: id,answer (lowercase)
+    import csv
+    csv_path = os.path.join(EVAL_RESULTS_DIR, f"{output_prefix}_submission.csv")
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "answer"])
+        for row_id, pred in zip(ids, predictions):
+            writer.writerow([row_id, pred.lower()])
 
-    print(f"Results saved to {EVAL_RESULTS_DIR}/vmlu_eval_results.json")
+    print(f"Metrics saved to {json_path}")
+    print(f"Submission CSV saved to {csv_path}")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base-only", action="store_true", help="Evaluate the raw base model (no adapters)")
+    parser.add_argument("--bfloat16", action="store_true", help="Load model in bfloat16 instead of 4-bit")
+    parser.add_argument("--output-prefix", type=str, default="vmlu_eval")
+    args = parser.parse_args()
+    
+    main(
+        load_adapters=not args.base_only, 
+        use_4bit=not args.bfloat16,
+        output_prefix=args.output_prefix
+    )
