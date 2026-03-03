@@ -4,7 +4,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .consts import (
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     CPT_OUTPUT_DIR,
     FINAL_MODEL_DIR,

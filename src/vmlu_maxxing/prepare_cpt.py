@@ -7,7 +7,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 from underthesea import classify
 
-from .consts import (
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     CPT_DATASET_NAME,
     CPT_MAX_SEQ_LEN,

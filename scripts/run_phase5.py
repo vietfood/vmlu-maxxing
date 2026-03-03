@@ -10,14 +10,15 @@ from vmlu_maxxing.evaluate import main as evaluate
 from vmlu_maxxing.export import merge_adapters
 
 
-def run(skip_eval: bool = False, skip_merge: bool = False, base_only: bool = False, bfloat16: bool = False, output_prefix: str = "vmlu_eval"):
+def run(skip_eval: bool = False, skip_merge: bool = False, base_only: bool = False, load_in_4bit: bool = False, output_prefix: str = "vmlu_eval", zero_shot: bool = False):
     print("=" * 60)
     print("PHASE 5: Evaluation & Final Merge")
     print("=" * 60)
 
     if not skip_eval:
-        print("\n[Step 5.1] Running 5-shot logit extraction evaluation...")
-        evaluate(load_adapters=not base_only, use_4bit=not bfloat16, output_prefix=output_prefix)
+        shot_text = "0-shot" if zero_shot else "5-shot"
+        print(f"\n[Step 5.1] Running {shot_text} logit extraction evaluation...")
+        evaluate(load_adapters=not base_only, use_4bit=load_in_4bit, output_prefix=output_prefix, use_few_shot=not zero_shot)
 
     if not skip_merge:
         print("\n[Step 5.2] Merging all adapters into standalone model...")
@@ -38,16 +39,20 @@ if __name__ == "__main__":
         "--base-only", action="store_true", help="Evaluate only the raw base model (skip loading any LoRA adapters)"
     )
     parser.add_argument(
-        "--bfloat16", action="store_true", help="Evaluate the model in bfloat16 precision instead of 4-bit"
+        "--load-in-4bit", action="store_true", help="Evaluate the model in 4-bit precision instead of bfloat16"
     )
     parser.add_argument(
         "--output-prefix", type=str, default="vmlu_eval", help="Prefix for the saved CSV and JSON results"
+    )
+    parser.add_argument(
+        "--zero-shot", action="store_true", help="Run 0-shot evaluation instead of 5-shot"
     )
     args = parser.parse_args()
     run(
         skip_eval=args.skip_eval, 
         skip_merge=args.skip_merge,
         base_only=args.base_only,
-        bfloat16=args.bfloat16,
-        output_prefix=args.output_prefix
+        load_in_4bit=args.load_in_4bit,
+        output_prefix=args.output_prefix,
+        zero_shot=args.zero_shot
     )

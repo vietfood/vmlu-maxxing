@@ -11,8 +11,8 @@ from transformers import (
 )
 from trl import SFTConfig, SFTTrainer
 
-from .collators import DataCollatorForMCQ
-from .consts import (
+from vmlu_maxxing.collators import DataCollatorForMCQ
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     DISTILLED_SFT_DIR,
     KD_ALPHA,
@@ -173,7 +173,6 @@ def get_kd_model_and_tokenizer():
         quantization_config=bnb_config,
         device_map="auto",
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
     )
 
     model.gradient_checkpointing_enable()

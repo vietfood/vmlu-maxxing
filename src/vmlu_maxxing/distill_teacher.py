@@ -6,7 +6,7 @@ from typing import Dict, List
 from datasets import Dataset, load_from_disk
 from openai import AsyncOpenAI
 
-from .consts import (
+from vmlu_maxxing.consts import (
     DISTILLED_SFT_DIR,
     FEW_SHOT_BANK_PATH,
     SFT_PACKED_DATA_DIR,

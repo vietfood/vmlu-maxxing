@@ -10,8 +10,8 @@ from transformers import (
 )
 from trl import SFTConfig, SFTTrainer
 
-from .collators import DataCollatorForMCQ
-from .consts import (
+from vmlu_maxxing.collators import DataCollatorForMCQ
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     CPT_OUTPUT_DIR,
     SFT_EPOCHS,
@@ -25,7 +25,7 @@ from .consts import (
     SFT_WEIGHT_DECAY,
     VMLU_RAW_DIR,
 )
-from .prepare_sft import load_jsonl
+from vmlu_maxxing.prepare_sft import load_jsonl
 
 
 def get_sft_model_and_tokenizer():
@@ -48,7 +48,6 @@ def get_sft_model_and_tokenizer():
         quantization_config=bnb_config,
         device_map="auto",
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",  # Optimized for A6000/5090 (Ampere/Ada/Blackwell)
     )
 
     # Enable gradient checkpointing to save VRAM and allow potentially larger batches
@@ -136,7 +135,7 @@ def main():
     valid_dataset = None
     if os.path.exists(valid_path):
         print("Prepping validation split...")
-        from .prepare_sft import format_mcq
+        from vmlu_maxxing.prepare_sft import format_mcq
 
         valid_raw = load_jsonl(valid_path)
         valid_processed = {

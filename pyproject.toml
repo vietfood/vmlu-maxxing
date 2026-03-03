@@ -24,3 +24,6 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
+
+[project.scripts]
+vmlu-maxxing = "vmlu_maxxing.cli:main"

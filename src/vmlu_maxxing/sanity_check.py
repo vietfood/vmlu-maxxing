@@ -6,7 +6,7 @@ from peft import PeftModel
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-from .consts import (
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     CPT_OUTPUT_DIR,
     MMLU_TASKS,
@@ -18,21 +18,29 @@ from .consts import (
 CPT_LORA_PATH = CPT_OUTPUT_DIR
 
 
-def load_model():
-    print(f"Loading base model {BASE_MODEL} in 4-bit...")
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-    )
-
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-    model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        quantization_config=bnb_config,
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
-    )
+def load_model(use_4bit: bool = False):
+    if use_4bit:
+        print(f"Loading base model {BASE_MODEL} in 4-bit...")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+        model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+        )
+    else:
+        print(f"Loading base model {BASE_MODEL} in full precision (bfloat16)...")
+        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+        model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+        )
 
     if os.path.exists(CPT_LORA_PATH):
         print(f"Loading CPT LoRA adapters from {CPT_LORA_PATH}...")
@@ -182,8 +190,15 @@ def run_mmlu_subset(model, tokenizer):
     )
 
 
-def main():
-    model, tokenizer = load_model()
+def main(use_4bit: bool = False):
+    model, tokenizer = load_model(use_4bit)
 
     generate_vietnamese(model, tokenizer)
     run_mmlu_subset(model, tokenizer)
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--load-in-4bit", action="store_true", help="Load model in 4-bit instead of bfloat16")
+    args = parser.parse_args()
+    main(use_4bit=args.load_in_4bit)

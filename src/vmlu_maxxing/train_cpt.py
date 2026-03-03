@@ -11,7 +11,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from .consts import (
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     CPT_EPOCHS,
     CPT_GRAD_ACCUM_STEPS,

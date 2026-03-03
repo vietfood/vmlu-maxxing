@@ -1,6 +1,4 @@
-def main():
-    print("Hello from vmlu-maxxing!")
-
+from vmlu_maxxing import cli
 
 if __name__ == "__main__":
-    main()
+    cli.main()

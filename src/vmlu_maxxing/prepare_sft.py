@@ -5,20 +5,20 @@ from collections import defaultdict
 from datasets import Dataset
 from transformers import AutoTokenizer
 
-from .consts import (
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     FEW_SHOT_BANK_PATH,
     SFT_PACKED_DATA_DIR,
     VMLU_RAW_DIR,
 )
-from .ingest_sources import (
+from vmlu_maxxing.ingest_sources import (
     ingest_arc_split,
     ingest_mmlu_split,
     ingest_sciq_split,
     ingest_vimmrc_split,
     ingest_vsec,
 )
-from .translate_pipeline import translate_sync
+from vmlu_maxxing.translate_pipeline import translate_sync
 
 
 def format_mcq(question: str, choices: list[str], answer: str = None) -> str:

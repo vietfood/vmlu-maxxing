@@ -7,7 +7,7 @@ from peft import PeftModel
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-from .consts import (
+from vmlu_maxxing.consts import (
     BASE_MODEL,
     CPT_OUTPUT_DIR,
     EVAL_RESULTS_DIR,
@@ -16,10 +16,10 @@ from .consts import (
     SFT_OUTPUT_DIR,
     VMLU_RAW_DIR,
 )
-from .prepare_sft import format_mcq, load_jsonl
+from vmlu_maxxing.prepare_sft import format_mcq, load_jsonl
 
 
-def get_eval_model_and_tokenizer(use_4bit: bool = True, load_adapters: bool = True):
+def get_eval_model_and_tokenizer(use_4bit: bool = False, load_adapters: bool = True):
     print(f"Loading tokenizer for {BASE_MODEL}...")
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 
@@ -35,7 +35,6 @@ def get_eval_model_and_tokenizer(use_4bit: bool = True, load_adapters: bool = Tr
             quantization_config=bnb_config,
             device_map="auto",
             torch_dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
         )
     else:
         print("Loading base model in bfloat16 full precision...")
@@ -43,7 +42,6 @@ def get_eval_model_and_tokenizer(use_4bit: bool = True, load_adapters: bool = Tr
             BASE_MODEL,
             device_map="auto",
             torch_dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
         )
 
     model.eval()
@@ -73,15 +71,17 @@ def get_eval_model_and_tokenizer(use_4bit: bool = True, load_adapters: bool = Tr
 
 def build_few_shot_prompt(question_row, few_shot_bank):
     """
-    Constructs the 5-shot context using the dev split bank prepared in Phase 1.
+    Constructs the context (with optional few-shot examples).
     """
-    subject = question_row.get("subject", "")
-    examples = few_shot_bank.get(subject, [])
-
     prompt = ""
-    # Append the formatted examples
-    for ex in examples:
-        prompt += ex["formatted"] + "\n\n"
+    
+    if few_shot_bank is not None:
+        subject = question_row.get("subject", "")
+        examples = few_shot_bank.get(subject, [])
+
+        # Append the formatted examples
+        for ex in examples:
+            prompt += ex["formatted"] + "\n\n"
 
     # Format the actual question (without providing the answer)
     # We use format_mcq but strip the trailing Answer out so the model can predict it
@@ -131,14 +131,16 @@ def evaluate_predictions(predictions, ground_truths, subjects):
     return {"overall": correct / total, "subjects": sub_acc}
 
 
-def main(load_adapters: bool = True, use_4bit: bool = True, output_prefix: str = "vmlu_eval"):
-    if not os.path.exists(FEW_SHOT_BANK_PATH):
-        raise FileNotFoundError(
-            f"Few shot bank missing at {FEW_SHOT_BANK_PATH}. Run prepare_sft.py first."
-        )
+def main(load_adapters: bool = True, use_4bit: bool = False, output_prefix: str = "vmlu_eval", use_few_shot: bool = True):
+    few_shot_bank = None
+    if use_few_shot:
+        if not os.path.exists(FEW_SHOT_BANK_PATH):
+            raise FileNotFoundError(
+                f"Few shot bank missing at {FEW_SHOT_BANK_PATH}. Run prepare_sft.py first."
+            )
 
-    with open(FEW_SHOT_BANK_PATH, "r", encoding="utf-8") as f:
-        few_shot_bank = json.load(f)
+        with open(FEW_SHOT_BANK_PATH, "r", encoding="utf-8") as f:
+            few_shot_bank = json.load(f)
 
     # Prefer test split if available, otherwise fallback to valid
     test_file = os.path.join(VMLU_RAW_DIR, "test.jsonl")
@@ -265,12 +267,14 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-only", action="store_true", help="Evaluate the raw base model (no adapters)")
-    parser.add_argument("--bfloat16", action="store_true", help="Load model in bfloat16 instead of 4-bit")
+    parser.add_argument("--load-in-4bit", action="store_true", help="Load model in 4-bit instead of bfloat16")
     parser.add_argument("--output-prefix", type=str, default="vmlu_eval")
+    parser.add_argument("--zero-shot", action="store_true", help="Run 0-shot evaluation instead of 5-shot")
     args = parser.parse_args()
     
     main(
         load_adapters=not args.base_only, 
-        use_4bit=not args.bfloat16,
-        output_prefix=args.output_prefix
+        use_4bit=args.load_in_4bit,
+        output_prefix=args.output_prefix,
+        use_few_shot=not args.zero_shot
     )
