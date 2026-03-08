@@ -65,8 +65,6 @@ def setup_model_and_tokenizer():
     model = prepare_model_for_kbit_training(model)
 
     print("Setting up LoRA adapter...")
-    # Target all linear layers (as per Phase 2 config mentioned in DEVELOPMENT.md)
-    # Llama/Qwen typical linear layers: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
     lora_config = LoraConfig(
         r=64,
         lora_alpha=128,
@@ -82,19 +80,16 @@ def setup_model_and_tokenizer():
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
-        init_lora_weights=True,  # PyTorch initializes to 0 by default for B matrices
+        init_lora_weights=True,
     )
 
     model = get_peft_model(model, lora_config)
-
-    # Verify exact zero-initialization of B matrices as per DEVELOPMENT.md rule 3
-    # Actually PEFT does this natively if init_lora_weights=True.
 
     model.print_trainable_parameters()
     return model, tokenizer
 
 
-def main():
+def train_cpt_model():
     if not os.path.exists(CPT_PACKED_DATA_DIR):
         raise FileNotFoundError(
             f"Prepared dataset not found at {CPT_PACKED_DATA_DIR}. Run prepare_cpt.py first."
@@ -113,9 +108,6 @@ def main():
 
     model, tokenizer = setup_model_and_tokenizer()
 
-    # Use standard Trainer for pre-tokenized data (not SFTTrainer).
-    # SFTTrainer's skip_prepare_dataset is non-standard and unreliable.
-    # Standard Trainer natively handles datasets with input_ids columns.
     training_args = TrainingArguments(
         output_dir=CPT_OUTPUT_DIR,
         logging_dir=CPT_LOG_DIR,
@@ -132,7 +124,7 @@ def main():
         save_steps=100,
         logging_steps=10,
         bf16=True,  # Use bfloat16 for training
-        report_to="none",  # Change to "wandb" if logging is needed
+        report_to="wandb",
     )
 
     collator = DataCollatorForCLM()

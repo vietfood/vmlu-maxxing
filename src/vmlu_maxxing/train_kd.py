@@ -2,7 +2,7 @@ import os
 
 import torch
 import torch.nn.functional as F
-from datasets import load_from_disk
+from datasets import load_from_disk, load_dataset
 from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
     AutoModelForCausalLM,
@@ -237,16 +237,25 @@ def get_kd_model_and_tokenizer():
     return model, tokenizer
 
 
-def main():
-    if not os.path.exists(DISTILLED_SFT_DIR):
+def train_kd_model(dataset_path: str = None):
+    actual_path = dataset_path or DISTILLED_SFT_DIR
+
+    if not os.path.exists(actual_path) and dataset_path is None:
         raise FileNotFoundError(
-            f"Distilled SFT dataset missing at {DISTILLED_SFT_DIR}. Run distill_teacher.py first."
+            f"Distilled SFT dataset missing at {actual_path}. Run distill_teacher.py first."
         )
 
     model, tokenizer = get_kd_model_and_tokenizer()
 
-    print(f"Loading distilled dataset from {DISTILLED_SFT_DIR}...")
-    train_dataset = load_from_disk(DISTILLED_SFT_DIR)
+    print(f"Loading distilled dataset from {actual_path}...")
+    if os.path.isdir(actual_path):
+        train_dataset = load_from_disk(actual_path)
+    else:
+        dataset = load_dataset(actual_path)
+        if "train" in dataset:
+            train_dataset = dataset["train"]
+        else:
+            train_dataset = dataset
 
     collator = DataCollatorForMCQ(tokenizer=tokenizer, pad_to_multiple_of=8)
 

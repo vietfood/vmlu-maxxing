@@ -131,7 +131,7 @@ def evaluate_predictions(predictions, ground_truths, subjects):
     return {"overall": correct / total, "subjects": sub_acc}
 
 
-def main(load_adapters: bool = True, use_4bit: bool = False, output_prefix: str = "vmlu_eval", use_few_shot: bool = True):
+def evaluate_model(load_adapters: bool = True, use_4bit: bool = False, output_prefix: str = "vmlu_eval", use_few_shot: bool = True):
     few_shot_bank = None
     if use_few_shot:
         if not os.path.exists(FEW_SHOT_BANK_PATH):
@@ -263,18 +263,3 @@ def main(load_adapters: bool = True, use_4bit: bool = False, output_prefix: str 
     print(f"Submission CSV saved to {csv_path}")
 
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--base-only", action="store_true", help="Evaluate the raw base model (no adapters)")
-    parser.add_argument("--load-in-4bit", action="store_true", help="Load model in 4-bit instead of bfloat16")
-    parser.add_argument("--output-prefix", type=str, default="vmlu_eval")
-    parser.add_argument("--zero-shot", action="store_true", help="Run 0-shot evaluation instead of 5-shot")
-    args = parser.parse_args()
-    
-    main(
-        load_adapters=not args.base_only, 
-        use_4bit=args.load_in_4bit,
-        output_prefix=args.output_prefix,
-        use_few_shot=not args.zero_shot
-    )

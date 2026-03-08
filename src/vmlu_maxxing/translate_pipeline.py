@@ -1,16 +1,12 @@
 import asyncio
 import json
-import os
 from typing import Dict, List
 
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-# Support both OpenAI and Google GenAI via LangChain as requested
-from langchain_openai import ChatOpenAI
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from tqdm.asyncio import tqdm
+
+from vmlu_maxxing.consts import SGLANG_HOST, TEACHER_MODEL_ID
 
 
 # We enforce exactly the same formatting required by VMLU via Pydantic
@@ -24,52 +20,56 @@ class TranslatedMCQ(BaseModel):
     )
 
 
-def get_llm_chain(provider="openai", model_name="gpt-4o-mini"):
+def get_async_client(provider="sglang"):
     """
-    Setup Langchain model with Pydantic structured output parser to strictly enforce JSON output format
+    Setup AsyncOpenAI client pointing to local SGLang Server.
     """
-    if provider == "openai":
-        llm = ChatOpenAI(model=model_name, temperature=0.1)
-    elif provider == "google":
-        llm = ChatGoogleGenerativeAI(model=model_name, temperature=0.1)
+    if provider == "sglang":
+        return AsyncOpenAI(
+            base_url=SGLANG_HOST,
+            api_key="EMPTY",
+        )
     else:
-        raise ValueError("Unsupported provider! Use 'openai' or 'google'")
-
-    # Setup prompt
-    parser = PydanticOutputParser(pydantic_object=TranslatedMCQ)
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are an expert English-to-Vietnamese translator specialized in maintaining exact multiple-choice exam formatting. Your output MUST be valid JSON fitting the provided schema.\n{format_instructions}",
-            ),
-            (
-                "user",
-                "Translate the following multiple choice question into Vietnamese. Keep any LaTeX or code blocks intact.\n\nQuestion: {question}\nChoices:\n{choices}\nAnswer Key: {answer}",
-            ),
-        ]
-    )
-
-    prompt = prompt.partial(format_instructions=parser.get_format_instructions())
-
-    # LangChain expression language (LCEL) chain
-    chain = prompt | llm | parser
-    return chain
+        raise ValueError("Unsupported provider! Only 'sglang' is supported locally.")
 
 
-async def _translate_single(chain, item: Dict) -> Dict:
+async def _translate_single(client: AsyncOpenAI, model_name: str, item: Dict) -> Dict:
     """Async wrapper for a single translation"""
     choices_str = "\n".join(item["choices"])
+
+    system_prompt = (
+        "You are an expert English-to-Vietnamese translator specialized in maintaining "
+        "exact multiple-choice exam formatting. Your output MUST be valid JSON fitting the schema:\n"
+        "{\n"
+        '  "question": "The translated Vietnamese question",\n'
+        '  "choices": ["The translated choices...", "Preserving exactly A., B., C., D. prefixes"],\n'
+        '  "answer": "The exact choice letter of the answer (e.g. A, B, C, D)."\n'
+        "}"
+    )
+
+    user_prompt = (
+        "Translate the following multiple choice question into Vietnamese. Keep any LaTeX or code blocks intact.\n\n"
+        f"Question: {item['question']}\n"
+        f"Choices:\n{choices_str}\n"
+        f"Answer Key: {item['answer']}"
+    )
+
     try:
-        # LangChain invoke
-        result: TranslatedMCQ = await chain.ainvoke(
-            {
-                "question": item["question"],
-                "choices": choices_str,
-                "answer": item["answer"],
-            }
+        response = await client.chat.completions.create(
+            model=model_name or TEACHER_MODEL_ID,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
         )
+
+        content = response.choices[0].message.content
+        result_dict = json.loads(content)
+
+        # Validate against our Pydantic schema to ensure correctness
+        result = TranslatedMCQ(**result_dict)
 
         return {
             "question": result.question,
@@ -83,20 +83,21 @@ async def _translate_single(chain, item: Dict) -> Dict:
 
 
 async def translate_dataset_batch(
-    dataset: List[Dict], provider="openai", model_name="gpt-4o-mini", batch_size=50
+    dataset: List[Dict], provider="sglang", model_name=None, batch_size=50
 ) -> List[Dict]:
     """
     Translates an entire ingested list of multiple-choice dictionaries asynchronously.
     """
-    chain = get_llm_chain(provider, model_name)
+    client = get_async_client(provider)
+    model_id = model_name or TEACHER_MODEL_ID
     translated_results = []
 
-    print(f"Starting {provider} ({model_name}) translation for {len(dataset)} items...")
+    print(f"Starting {provider} ({model_id}) translation for {len(dataset)} items...")
 
     # We batch async calls to avoid rate limiting
-    for i in range(0, len(dataset), batch_size):
+    for i in tqdm(range(0, len(dataset), batch_size), desc="Translating batches"):
         batch = dataset[i : i + batch_size]
-        tasks = [_translate_single(chain, item) for item in batch]
+        tasks = [_translate_single(client, model_id, item) for item in batch]
 
         # Execute batch and wait
         results = await asyncio.gather(*tasks)
@@ -105,10 +106,6 @@ async def translate_dataset_batch(
         valid_results = [res for res in results if res is not None]
         translated_results.extend(valid_results)
 
-        print(
-            f"Processed batch {i // batch_size + 1}, successful: {len(valid_results)}/{len(batch)}"
-        )
-
         # Small delay between batches
         await asyncio.sleep(1.0)
 
@@ -116,7 +113,7 @@ async def translate_dataset_batch(
 
 
 def translate_sync(
-    dataset: List[Dict], provider="openai", model_name="gpt-4o-mini", batch_size=50
+    dataset: List[Dict], provider="sglang", model_name=None, batch_size=50
 ):
     """Synchronous wrapper for script execution."""
     return asyncio.run(

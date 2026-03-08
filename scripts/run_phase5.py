@@ -6,7 +6,7 @@ Phase 5: Evaluation & Final Merge
 
 import argparse
 
-from vmlu_maxxing.evaluate import main as evaluate
+from vmlu_maxxing.evaluate import evaluate_model as evaluate
 from vmlu_maxxing.export import merge_adapters
 
 

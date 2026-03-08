@@ -5,16 +5,16 @@ Phase 2: Vietnamese SFT with QLoRA
 - Stacks SFT adapter on top of Phase 0 CPT adapter (if present)
 """
 
-from vmlu_maxxing.train_sft import main as train_sft
+from vmlu_maxxing.train_sft import train_sft_model as train_sft
 
 
-def run():
+def run(dataset_path: str = None):
     print("=" * 60)
     print("PHASE 2: Vietnamese SFT with QLoRA")
     print("=" * 60)
 
     print("\n[Step 2.1-2.3] Training SFT...")
-    train_sft()
+    train_sft(dataset_path)
 
     print("\n✅ Phase 2 Complete!")
 

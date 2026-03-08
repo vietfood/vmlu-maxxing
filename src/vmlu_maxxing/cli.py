@@ -9,40 +9,45 @@ from vmlu_maxxing import train_kd
 from vmlu_maxxing import evaluate
 from vmlu_maxxing import export
 
-def run_phase0():
+def run_phase0(dataset_path: str = None):
     print("=" * 60)
     print("PHASE 0: CPT Pre-training")
     print("=" * 60)
-    prepare_cpt.main()
-    train_cpt.main()
+    
+    if dataset_path is None:
+        prepare_cpt.prepare_cpt_data()
+    else:
+        print(f"Skipping local data preparation, using dataset: {dataset_path}")
+
+    train_cpt.train_cpt_model(dataset_path)
     print("\n✅ Phase 0 Complete!")
 
 def run_phase1(do_translation: bool = False):
     print("=" * 60)
     print("PHASE 1: SFT Data Preparation")
     print("=" * 60)
-    prepare_sft.main(do_translation=do_translation)
+    prepare_sft.prepare_sft_data(do_translation=do_translation)
     print("\n✅ Phase 1 Complete!")
 
-def run_phase2():
+def run_phase2(dataset_path: str = None):
     print("=" * 60)
     print("PHASE 2: SFT Training")
     print("=" * 60)
-    train_sft.main()
+    train_sft.train_sft_model(dataset_path)
     print("\n✅ Phase 2 Complete!")
 
-def run_phase3():
+def run_phase3(dataset_path: str = None):
     print("=" * 60)
     print("PHASE 3: Logit Distillation Extraction")
     print("=" * 60)
-    distill_teacher.main()
+    distill_teacher.extract_teacher_logits(dataset_path)
     print("\n✅ Phase 3 Complete!")
 
-def run_phase4():
+def run_phase4(dataset_path: str = None):
     print("=" * 60)
     print("PHASE 4: Knowledge Distillation Training")
     print("=" * 60)
-    train_kd.main()
+    train_kd.train_kd_model(dataset_path)
     print("\n✅ Phase 4 Complete!")
 
 def run_phase5(skip_eval: bool = False, skip_merge: bool = False, base_only: bool = False, load_in_4bit: bool = False, output_prefix: str = "vmlu_eval", zero_shot: bool = False):
@@ -53,7 +58,7 @@ def run_phase5(skip_eval: bool = False, skip_merge: bool = False, base_only: boo
     if not skip_eval:
         shot_text = "0-shot" if zero_shot else "5-shot"
         print(f"\n[Step 5.1] Running {shot_text} logit extraction evaluation...")
-        evaluate.main(load_adapters=not base_only, use_4bit=load_in_4bit, output_prefix=output_prefix, use_few_shot=not zero_shot)
+        evaluate.evaluate_model(load_adapters=not base_only, use_4bit=load_in_4bit, output_prefix=output_prefix, use_few_shot=not zero_shot)
 
     if not skip_merge:
         print("\n[Step 5.2] Merging all adapters into standalone model...")
@@ -69,11 +74,13 @@ def main():
     parser_all = subparsers.add_parser("run-all", help="Run all phases sequentially")
     parser_all.add_argument("--start-from", type=int, default=0, choices=[0, 1, 2, 3, 4, 5], help="Phase to start from")
     parser_all.add_argument("--translate", action="store_true", help="Enable English dataset translation in Phase 1")
+    parser_all.add_argument("--dataset-path", type=str, default=None, help="Custom dataset path (local or HF HuggingFace ID) to inject to Phase 0, 2, 3 or 4")
     
     # Command: run-phase
     parser_phase = subparsers.add_parser("run-phase", help="Run a specific phase")
     parser_phase.add_argument("phase", type=int, choices=[0, 1, 2, 3, 4, 5], help="Phase number to run")
     parser_phase.add_argument("--translate", action="store_true", help="Enable English dataset translation in Phase 1")
+    parser_phase.add_argument("--dataset-path", type=str, default=None, help="Custom dataset path (local or HF HuggingFace ID)")
     
     # Phase 5 specific args for run-phase
     parser_phase.add_argument("--skip-eval", action="store_true", help="Phase 5: Skip evaluation")
@@ -87,11 +94,11 @@ def main():
 
     if args.command == "run-all":
         phases = {
-            0: lambda: run_phase0(),
+            0: lambda: run_phase0(dataset_path=args.dataset_path),
             1: lambda: run_phase1(do_translation=args.translate),
-            2: lambda: run_phase2(),
-            3: lambda: run_phase3(),
-            4: lambda: run_phase4(),
+            2: lambda: run_phase2(dataset_path=args.dataset_path),
+            3: lambda: run_phase3(dataset_path=args.dataset_path),
+            4: lambda: run_phase4(dataset_path=args.dataset_path),
             5: lambda: run_phase5(),
         }
         for phase_num in range(args.start_from, 6):
@@ -101,15 +108,15 @@ def main():
         
     elif args.command == "run-phase":
         if args.phase == 0:
-            run_phase0()
+            run_phase0(dataset_path=args.dataset_path)
         elif args.phase == 1:
             run_phase1(do_translation=args.translate)
         elif args.phase == 2:
-            run_phase2()
+            run_phase2(dataset_path=args.dataset_path)
         elif args.phase == 3:
-            run_phase3()
+            run_phase3(dataset_path=args.dataset_path)
         elif args.phase == 4:
-            run_phase4()
+            run_phase4(dataset_path=args.dataset_path)
         elif args.phase == 5:
             run_phase5(
                 skip_eval=args.skip_eval,

@@ -41,7 +41,7 @@ def contains_educational_content(text: str) -> bool:
         return False
 
 
-def build_dataset():
+def prepare_cpt_data():
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 
@@ -96,7 +96,6 @@ def build_dataset():
         text = collected_texts[i]
 
         # We are doing Continuous Pretraining (CPT), so we use raw text instead of chat format
-        # as specified in DEVELOPMENT.md Phase 0
         tokens = tokenizer.encode(text)
         tokens.append(tokenizer.eos_token_id)
 

@@ -5,7 +5,7 @@ Phase 1: Data Curation & Vietnamese MCQ Corpus
 - Saves the unified SFT dataset to data/sft/
 """
 
-from vmlu_maxxing.prepare_sft import main as prepare_sft
+from vmlu_maxxing.prepare_sft import prepare_sft_data as prepare_sft
 
 
 def run(do_translation: bool = False):

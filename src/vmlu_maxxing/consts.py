@@ -8,7 +8,6 @@ CPT_MAX_SEQ_LEN = 2048
 CPT_PACKED_DATA_DIR = "data/cpt_packed"
 
 # Educational/Factual topics categorized by `underthesea`
-# underthesea returns topics without diacritics
 EDUCATIONAL_TOPICS = {
     "Khoa hoc",
     "Cong nghe",

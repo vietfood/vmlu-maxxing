@@ -5,10 +5,10 @@ Phase 3: Knowledge Distillation from Strong Teacher
 - Saves distilled soft labels to data/distilled_sft/
 """
 
-from vmlu_maxxing.distill_teacher import main as distill_teacher
+from vmlu_maxxing.distill_teacher import extract_teacher_logits as distill_teacher
 
 
-def run():
+def run(dataset_path: str = None):
     print("=" * 60)
     print("PHASE 3: Knowledge Distillation from Strong Teacher")
     print("=" * 60)
@@ -18,7 +18,7 @@ def run():
     print()
 
     print("[Step 3.1] Extracting teacher logprobs via SGLang...")
-    distill_teacher()
+    distill_teacher(dataset_path)
 
     print("\n✅ Phase 3 Complete!")
 

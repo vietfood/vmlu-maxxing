@@ -60,5 +60,3 @@ def merge_adapters():
     print("\\n🎉 VMLU Maxxing Complete: Model Exported Successfully! 🎉")
 
 
-if __name__ == "__main__":
-    merge_adapters()

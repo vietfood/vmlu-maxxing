@@ -23,7 +23,6 @@ from vmlu_maxxing.translate_pipeline import translate_sync
 
 def format_mcq(question: str, choices: list[str], answer: str = None) -> str:
     """
-    Formats the MCQ strictly based on DEVELOPMENT.md:
     Câu hỏi: {question}
     A. {choice_A}
     B. {choice_B}
@@ -122,7 +121,9 @@ def build_sft_dataset(train_data: list[dict], tokenizer):
             continue
 
         # 3. Warn on duplicate choices (don't crash)
-        choice_texts = [c.split(".", 1)[-1].strip() if "." in c else c.strip() for c in choices]
+        choice_texts = [
+            c.split(".", 1)[-1].strip() if "." in c else c.strip() for c in choices
+        ]
         if len(set(choice_texts)) < len(choice_texts):
             print(f"Warning: duplicate choices in question: {question[:80]}...")
 
@@ -156,7 +157,7 @@ def build_sft_dataset(train_data: list[dict], tokenizer):
     dataset.save_to_disk(SFT_PACKED_DATA_DIR)
 
 
-def main(do_translation=False, provider="openai", model_name="gpt-4o-mini"):
+def prepare_sft_data(do_translation=False, provider="sglang", model_name=None):
     print("Initializing Phase 1 SFT Pipeline...")
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 
@@ -226,7 +227,7 @@ def main(do_translation=False, provider="openai", model_name="gpt-4o-mini"):
             print(f"Failed to load or translate English datasets: {e}")
     else:
         print(
-            "\nSkipping translation pipeline. Use main(do_translation=True) with an API Key to translate MMLU/ARC/SciQ."
+            "\nSkipping translation pipeline. Use main(do_translation=True) to translate MMLU/ARC/SciQ locally via SGLang."
         )
 
     if not sft_data:

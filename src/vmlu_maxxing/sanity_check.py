@@ -190,15 +190,9 @@ def run_mmlu_subset(model, tokenizer):
     )
 
 
-def main(use_4bit: bool = False):
+def sanity_check(use_4bit: bool = False):
     model, tokenizer = load_model(use_4bit)
 
     generate_vietnamese(model, tokenizer)
     run_mmlu_subset(model, tokenizer)
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--load-in-4bit", action="store_true", help="Load model in 4-bit instead of bfloat16")
-    args = parser.parse_args()
-    main(use_4bit=args.load_in_4bit)

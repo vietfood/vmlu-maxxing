@@ -3,7 +3,7 @@ import math
 import os
 from typing import Dict, List
 
-from datasets import Dataset, load_from_disk
+from datasets import Dataset, load_from_disk, load_dataset
 from openai import AsyncOpenAI
 
 from vmlu_maxxing.consts import (
@@ -131,14 +131,23 @@ async def distill_dataset(dataset: Dataset, batch_size: int = 200) -> Dataset:
     return Dataset.from_list(processed_items)
 
 
-def main():
-    if not os.path.exists(SFT_PACKED_DATA_DIR):
+def extract_teacher_logits(dataset_path: str = None):
+    actual_path = dataset_path or SFT_PACKED_DATA_DIR
+
+    if not os.path.exists(actual_path) and dataset_path is None:
         raise FileNotFoundError(
-            f"SFT Dataset missing at {SFT_PACKED_DATA_DIR}. Run prepare_sft.py first."
+            f"SFT Dataset missing at {actual_path}. Run prepare_sft.py first."
         )
 
-    print(f"Loading Student SFT Dataset from {SFT_PACKED_DATA_DIR}...")
-    dataset = load_from_disk(SFT_PACKED_DATA_DIR)
+    print(f"Loading Student SFT Dataset from {actual_path}...")
+    if os.path.isdir(actual_path):
+        dataset = load_from_disk(actual_path)
+    else:
+        ds = load_dataset(actual_path)
+        if "train" in ds:
+            dataset = ds["train"]
+        else:
+            dataset = ds
 
     # Run async loop
     distilled_dataset = asyncio.run(distill_dataset(dataset))
